@@ -345,48 +345,46 @@ def update_calories():
         user_id = session['user_id']
         data = request.get_json()
         today = datetime.datetime.today().strftime('%A')  # Get the current day of the week as a string
-        query = f"UPDATE weekly_calories SET {today} = ? WHERE id = ?"
         calories_burned = data.get('caloriesBurned', 0)
+
+        # Validate the day of the week
+        valid_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        if today not in valid_days:
+            return jsonify({"error": "Invalid day of the week"}), 400
 
         conn = get_db()
         cursor = conn.cursor()
         try:
+            # Fetch current calories for the day
+            cursor.execute(f"SELECT {today} FROM weekly_calories WHERE id = ?", (user_id,))
+            result = cursor.fetchone()
+            current_day_calories = result[0] if result and result[0] is not None else 0
+
+            # Update the calories for the current day
+            new_day_calories = current_day_calories + calories_burned
+            cursor.execute(f"UPDATE weekly_calories SET {today} = ? WHERE id = ?", (new_day_calories, user_id))
+
+            # Update the user's total calories for the day
             cursor.execute("SELECT caloriesCurrentday, numberOfDays, last_day_incremented FROM users WHERE id = ?", (user_id,))
             result = cursor.fetchone()
             if result is None:
                 conn.close()
                 return jsonify({"error": "User not found"}), 404
+
             current_calories = result['caloriesCurrentday'] if result['caloriesCurrentday'] is not None else 0
             number_of_days = result['numberOfDays'] if result['numberOfDays'] is not None else 0
             last_incremented = result['last_day_incremented']
-
-            # This part we can also update todays calories burnt ? If only we can read what day is it today ????!!?
             new_calories = current_calories + calories_burned
-            print('skibidiahhhhhhhhhhh',new_calories, type(today)) #Debug -> Still works
-            # Debugging: Check if user_id exists in the database
-            cursor.execute("SELECT id FROM users WHERE id = ?", (user_id,))
-            user_exists = cursor.fetchone()
-            if not user_exists:
-                conn.close()
-                return jsonify({"error": "User not found"}), 404
 
-            # Proceed to update calories if user exists
-            cursor.execute("UPDATE users SET caloriesCurrentday = ? WHERE id = ?", (new_calories, user_id))
-            cursor.execute(query, (new_calories, user_id))
-            conn.commit()  # Ensure the changes are committed immediately after the update
             today_str = datetime.date.today().isoformat()
+            if new_calories > 0 and last_incremented != today_str:
+                number_of_days += 1
+                cursor.execute("UPDATE users SET numberOfDays = ?, last_day_incremented = ? WHERE id = ?", (number_of_days, today_str, user_id))
 
-            if new_calories > 0:
-                if last_incremented != today_str:
-                    number_of_days += 1
-                    cursor.execute("UPDATE users SET numberOfDays = ?, last_day_incremented = ? WHERE id = ?", (number_of_days, today_str, user_id))
-                # else:
-                #     # Đã tăng numberOfDays trong ngày hôm nay rồi
-            # elif new_calories == 0:
-            #     # Tùy chọn: reset last_day_incremented?
-
+            cursor.execute("UPDATE users SET caloriesCurrentday = ? WHERE id = ?", (new_calories, user_id))
             conn.commit()
             conn.close()
+
             return jsonify({"message": "Calories updated successfully"}), 200
         except Exception as e:
             conn.rollback()
