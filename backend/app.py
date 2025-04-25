@@ -8,6 +8,8 @@ import time  # Import thư viện time
 import datetime
 import os 
 import io
+import matplotlib
+matplotlib.use('Agg')  # Use a non-interactive backend for server-side rendering
 import matplotlib.pyplot as plt
 import pandas as pd
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -225,12 +227,11 @@ def generate_progress_chart():
     if not row:
         return jsonify({"error": "No data found"}), 404
 
-    # Unpack the row into variables for each day
-    monday, tuesday, wednesday, thursday, friday, saturday, sunday = row
+    # Unpack the row into variables for each day, replacing None with 0
+    days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    calories = [value if value is not None else 0 for value in row]
 
     # Create a pandas DataFrame
-    days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-    calories = [monday, tuesday, wednesday, thursday, friday, saturday, sunday]
     data = pd.DataFrame({'Day': days, 'Calories Burned': calories})
 
     # Generate the bar chart
